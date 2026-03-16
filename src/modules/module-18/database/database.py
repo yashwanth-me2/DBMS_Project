@@ -35,7 +35,7 @@ def setup_database():
                 "faq_id":         {"bsonType": "string"},
                 "question_text":  {"bsonType": "string"},
                 "static_answer":  {"bsonType": "string"},
-                "category":       {"enum": ["Medication", "Lab Values", "General"]},
+                "category":       {"enum": ["Medication", "Lab Values", "General", "Procedure"]},
                 "template_id":    {"bsonType": "string"} # FK to Question Templates
             }
         }
@@ -108,35 +108,43 @@ def setup_database():
     # Add: query_log_id, question_type, data_source_required
     _default_templates = [
         {
-            "intent": "patient_history",    
-            "pattern": r"patient.*?history|history.*?patient",
+            "intent": "patient_history",
+            "pattern": r"patient.*?history|history.*?patient|past.*?record|medical.*?record|last\s+\d+\s+days|recent.*?visit|previous.*?diagnosis|admission.*?history",
             "query_log_id": "log_tmpl_01",
             "question_type": "Temporal",
             "data_source_required": "Patient_Records_DB",
             "answer_id": "ans_tmpl_text"
         },
         {
-            "intent": "medication_guidance", 
-            "pattern": r"medication.*?guidance|guidance.*?medication",
+            "intent": "medication_guidance",
+            "pattern": r"medication|dosage|side\s*effects?|drug.*?interact|prescri(?:be|ption)|administer|contraindication|dose\b|pharma",
             "query_log_id": "log_tmpl_02",
             "question_type": "Factual",
             "data_source_required": "Pharmacy_DB",
             "answer_id": "ans_tmpl_text"
         },
         {
-            "intent": "statistical_query",  
-            "pattern": r"statistical.*?query|query.*?statistical",
+            "intent": "statistical_query",
+            "pattern": r"statistic|trend|symptom.*?count|avg|average.*?recovery|outbreak|frequency",
             "query_log_id": "log_tmpl_03",
             "question_type": "Statistical",
             "data_source_required": "Hospital_Analytics_DB",
             "answer_id": "ans_tmpl_table"
         },
         {
-            "intent": "dashboard_stats",  
-            "pattern": r"number.*?patients|how many.*?doctors|active.*?wards|hospital.*?stats|available.*?beds",
+            "intent": "dashboard_stats",
+            "pattern": r"number.*?patients|how many.*?doctors|active.*?wards|hospital.*?stats|available.*?beds|total.*?beds|hospital.*?overview|capacity",
             "query_log_id": "log_tmpl_04",
             "question_type": "Statistical",
             "data_source_required": "Hospital_Overview_DB",
+            "answer_id": "ans_tmpl_table"
+        },
+        {
+            "intent": "comparative_analysis",
+            "pattern": r"compare|difference\s+between|versus|vs\b|better",
+            "query_log_id": "log_tmpl_05",
+            "question_type": "Comparative",
+            "data_source_required": "Hospital_Analytics_DB",
             "answer_id": "ans_tmpl_table"
         },
     ]
