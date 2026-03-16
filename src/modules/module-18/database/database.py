@@ -1,0 +1,215 @@
+import os
+import re
+from pathlib import Path
+from pymongo import MongoClient, TEXT
+from pymongo.errors import CollectionInvalid
+from dotenv import load_dotenv
+
+# Load .env from the module-18 root (works whether run from backend/ or module-18/)
+_env_path = Path(__file__).resolve().parents[1] / ".env"
+load_dotenv(dotenv_path=_env_path)
+
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+
+# MongoClient is created lazily; no blocking here
+client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=10000)
+db = client.module_18_db
+
+
+# These will be populated by setup_database()
+faq_repository = db.faq_repository
+question_templates = db.question_templates
+evidence_logs = db.evidence_logs
+answer_templates = db.answer_templates  # NEW collection
+
+
+def setup_database():
+    """Apply schema validation, create indexes, and seed initial data."""
+    
+    # 1. FAQ Repository Validator
+    faq_validator = {
+        "$jsonSchema": {
+            "bsonType": "object",
+            "required": ["faq_id", "question_text", "static_answer", "category", "template_id"],
+            "properties": {
+                "faq_id":         {"bsonType": "string"},
+                "question_text":  {"bsonType": "string"},
+                "static_answer":  {"bsonType": "string"},
+                "category":       {"enum": ["Medication", "Lab Values", "General"]},
+                "template_id":    {"bsonType": "string"} # FK to Question Templates
+            }
+        }
+    }
+
+    try:
+        db.create_collection("faq_repository", validator=faq_validator)
+    except CollectionInvalid:
+        db.command("collMod", "faq_repository", validator=faq_validator)
+        
+    faq_repository.create_index([("question_text", TEXT)], default_language="english")
+
+    if faq_repository.count_documents({}) == 0:
+        faq_repository.insert_many([
+            {
+                "faq_id": "faq_001",
+                "question_text": "What is the standard dosage for Aspirin?",
+                "static_answer": "The standard dose is 81 mg to 325 mg once daily.",
+                "category": "Medication",
+                "template_id": "qt_med_01"
+            },
+            {
+                "faq_id": "faq_002",
+                "question_text": "What is the normal range for fasting blood sugar?",
+                "static_answer": (
+                    "A fasting blood sugar level from 70 to 99 mg/dL "
+                    "(3.9 to 5.5 mmol/L) is considered normal."
+                ),
+                "category": "Lab Values",
+                "template_id": "qt_lab_01"
+            },
+            {
+                "faq_id": "faq_003",
+                "question_text": "What are the common side effects of Lisinopril?",
+                "static_answer": "Common side effects include a dry, persistent cough, dizziness, and headaches.",
+                "category": "Medication",
+                "template_id": "qt_med_02"
+            },
+            {
+                "faq_id": "faq_004",
+                "question_text": "How do I prepare for an MRI scan?",
+                "static_answer": "You should leave all metallic objects at home. Wear comfortable, loose-fitting clothing without metal fasteners. Follow any specific fasting instructions given by your doctor.",
+                "category": "General",
+                "template_id": "qt_gen_01"
+            },
+            {
+                "faq_id": "faq_005",
+                "question_text": "What is a normal resting heart rate for adults?",
+                "static_answer": "A normal resting heart rate for most adults ranges from 60 to 100 beats per minute.",
+                "category": "Lab Values",
+                "template_id": "qt_lab_02"
+            },
+            {
+                "faq_id": "faq_006",
+                "question_text": "What should I bring to my first appointment?",
+                "static_answer": "Please bring your photo ID, insurance card, a list of current medications, and any previous medical records or test results.",
+                "category": "General",
+                "template_id": "qt_gen_02"
+            },
+            {
+                "faq_id": "faq_007",
+                "question_text": "When should I take Atorvastatin?",
+                "static_answer": "It is generally recommended to take Atorvastatin once a day at the same time every day. Many doctors suggest taking it in the evening.",
+                "category": "Medication",
+                "template_id": "qt_med_03"
+            }
+        ])
+
+    # 2. Question Templates Validator & Seeding
+    # Add: query_log_id, question_type, data_source_required
+    _default_templates = [
+        {
+            "intent": "patient_history",    
+            "pattern": r"patient.*?history|history.*?patient",
+            "query_log_id": "log_tmpl_01",
+            "question_type": "Temporal",
+            "data_source_required": "Patient_Records_DB",
+            "answer_id": "ans_tmpl_text"
+        },
+        {
+            "intent": "medication_guidance", 
+            "pattern": r"medication.*?guidance|guidance.*?medication",
+            "query_log_id": "log_tmpl_02",
+            "question_type": "Factual",
+            "data_source_required": "Pharmacy_DB",
+            "answer_id": "ans_tmpl_text"
+        },
+        {
+            "intent": "statistical_query",  
+            "pattern": r"statistical.*?query|query.*?statistical",
+            "query_log_id": "log_tmpl_03",
+            "question_type": "Statistical",
+            "data_source_required": "Hospital_Analytics_DB",
+            "answer_id": "ans_tmpl_table"
+        },
+        {
+            "intent": "dashboard_stats",  
+            "pattern": r"number.*?patients|how many.*?doctors|active.*?wards|hospital.*?stats|available.*?beds",
+            "query_log_id": "log_tmpl_04",
+            "question_type": "Statistical",
+            "data_source_required": "Hospital_Overview_DB",
+            "answer_id": "ans_tmpl_table"
+        },
+    ]
+    for t in _default_templates:
+        question_templates.update_one(
+            {"intent": t["intent"]},
+            {"$set": t},
+            upsert=True,
+        )
+
+
+    # 3. Answer Templates Validator & Seeding
+    # Fields: answer_id (PK), display_configuration, format_type
+    answer_validator = {
+        "$jsonSchema": {
+            "bsonType": "object",
+            "required": ["answer_id", "display_configuration", "format_type"],
+            "properties": {
+                "answer_id":             {"bsonType": "string"},
+                "display_configuration": {"bsonType": "string"},
+                "format_type":           {"enum": ["Text", "Table", "Chart", "Summary"]}
+            }
+        }
+    }
+    try:
+        db.create_collection("answer_templates", validator=answer_validator)
+    except CollectionInvalid:
+        db.command("collMod", "answer_templates", validator=answer_validator)
+
+    if answer_templates.count_documents({}) == 0:
+        answer_templates.insert_many([
+            {
+                "answer_id": "ans_tmpl_text",
+                "display_configuration": "Standard markdown rendering",
+                "format_type": "Text"
+            },
+            {
+                "answer_id": "ans_tmpl_table",
+                "display_configuration": "Render as structured data grid",
+                "format_type": "Table"
+            },
+            {
+                "answer_id": "ans_tmpl_summary",
+                "display_configuration": "Bullet point highlighted summary",
+                "format_type": "Summary"
+            }
+        ])
+
+    # 4. Evidence Logs Validator
+    # Fields: evidence_id, source_reference, confidence_score, timestamp
+    evidence_validator = {
+        "$jsonSchema": {
+            "bsonType": "object",
+            "required": ["evidence_id", "source_reference", "confidence_score", "timestamp"],
+            "properties": {
+                "evidence_id":      {"bsonType": "string"},
+                "source_reference": {"bsonType": "string"},
+                "confidence_score": {"bsonType": "double"},
+                "timestamp":        {"bsonType": "date"}
+            }
+        }
+    }
+
+
+    try:
+        db.create_collection("evidence_logs", validator=evidence_validator)
+    except CollectionInvalid:
+        db.command("collMod", "evidence_logs", validator=evidence_validator)
+
+    print("Database setup complete.")
+
+
+if __name__ == "__main__":
+    setup_database()
+    print("faq_repository:", faq_repository.name)
+    print("question_templates:", question_templates.name)
