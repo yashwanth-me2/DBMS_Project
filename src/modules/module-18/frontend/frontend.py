@@ -82,10 +82,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab_chat, tab_dash, tab_faq, tab_answers, tab_api = st.tabs([
+tab_chat, tab_dash, tab_answers, tab_api = st.tabs([
     "💬 Chatbot", 
     "📊 Dashboard", 
-    "📝 Manage FAQs",
     "🎨 Answer Templates",
     "🔌 API Reference"
 ])
@@ -220,109 +219,727 @@ with tab_chat:
 
 # ── TAB 2: DASHBOARD ──────────────────────────────────────────────────────
 with tab_dash:
-    st.subheader("Hospital Overview Dashboard")
-    try:
-        res = requests.get(f"{API_URL}/api/m18/hospital/stats")
-        if res.status_code == 200:
-            stats = res.json().get("data", {})
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("👨‍⚕️ Total Doctors", stats.get("Total Doctors", 0))
-            col2.metric("🏥 Active Wards", stats.get("Active Wards", 0))
-            col3.metric("🛏️ Total Beds", stats.get("Total Beds", 0))
-            col4.metric("✅ Available Beds", stats.get("Available Beds", 0))
-            
-            st.markdown("### 🔬 Specialized Facilities Available")
-            facilities = stats.get("Specialized Facilities", [])
-            for f in facilities:
-                st.markdown(f"- {f}")
-        else:
-            st.error("Failed to load dashboard stats.")
-    except Exception as e:
-        st.error(f"Could not connect to backend: {e}")
+    st.subheader("📊 Comprehensive Project Dashboard")
+    st.caption("Toggle each section to explore hospital stats, chatbot internals, queries, and architecture.")
 
-# ── TAB 3: MANAGE FAQS ────────────────────────────────────────────────────
-with tab_faq:
-    st.subheader("📝 Manage Clinical FAQs")
-    st.markdown("Add, edit, or delete FAQs directly from this list. Changes reflect immediately in the Chatbot.")
-    
-    # Refresh FAQs
-    def fetch_faqs():
+    # ── SECTION 1: Hospital Overview ──────────────────────────────────
+    with st.expander("📊 Hospital Overview Dashboard", expanded=True):
         try:
-            r = requests.get(f"{API_URL}/api/m18/faqs")
-            if r.status_code == 200:
-                return r.json().get("data", [])
-            return []
-        except:
-            return []
+            res = requests.get(f"{API_URL}/api/m18/hospital/stats")
+            if res.status_code == 200:
+                stats = res.json().get("data", {})
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("👨‍⚕️ Total Doctors", stats.get("Total Doctors", 0))
+                col2.metric("🏥 Active Wards", stats.get("Active Wards", 0))
+                col3.metric("🛏️ Total Beds", stats.get("Total Beds", 0))
+                col4.metric("✅ Available Beds", stats.get("Available Beds", 0))
 
-    # Add FAQ Section
-    with st.expander("✨ Add New FAQ", expanded=False):
-        with st.form("add_faq_form", clear_on_submit=True):
-            col_id, col_cat = st.columns(2)
-            with col_id:
-                new_id = st.text_input("FAQ ID (e.g. faq_010)")
-            with col_cat:
-                new_cat = st.selectbox("Category", ["General", "Medication", "Lab Values", "Procedure"])
-            new_q = st.text_input("Question")
-            new_a = st.text_area("Answer")
-            
-            if st.form_submit_button("Save FAQ"):
-                if new_id and new_q and new_a:
-                    res = requests.post(f"{API_URL}/api/m18/faqs", json={
-                        "faq_id": new_id, "question_text": new_q, "static_answer": new_a, "category": new_cat
-                    })
-                    if res.status_code == 200:
-                        st.success("FAQ Added Successfully!")
-                        st.rerun()
-                    else:
-                        st.error(res.json().get("detail", "Error adding FAQ"))
-                else:
-                    st.warning("Please fill out the ID, Question, and Answer fields.")
+                st.markdown("**🔬 Specialized Facilities Available**")
+                facilities = stats.get("Specialized Facilities", [])
+                fac_cols = st.columns(len(facilities) if facilities else 1)
+                for i, f in enumerate(facilities):
+                    fac_cols[i].success(f"🏥 {f}")
+            else:
+                st.error("Failed to load dashboard stats.")
+        except Exception as e:
+            st.error(f"Could not connect to backend: {e}")
 
-    st.markdown("---")
+    # ── SECTION 2: MongoDB Collections, Schemas & SQL Equivalents ─────
+    with st.expander("🗄️ MongoDB Collections, Schemas & Equivalent SQL", expanded=False):
+        st.markdown("#### 🗄️ MongoDB Collections & Schemas")
 
-    faqs = fetch_faqs()
-    if faqs:
-        for faq in faqs:
-            with st.container(border=True):
-                col1, col2, col3 = st.columns([6, 1.5, 1.5])
-                with col1:
-                    st.markdown(f"**{faq['question_text']}**")
-                    st.caption(f"ID: `{faq['faq_id']}` | Category: `{faq['category']}`")
-                with col2:
-                    if st.button("✏️ Edit", key=f"btn_edit_{faq['faq_id']}", use_container_width=True):
-                        st.session_state[f"edit_mode_{faq['faq_id']}"] = not st.session_state.get(f"edit_mode_{faq['faq_id']}", False)
-                with col3:
-                    if st.button("🗑️ Delete", type="primary", key=f"btn_del_{faq['faq_id']}", use_container_width=True):
-                        res = requests.delete(f"{API_URL}/api/m18/faqs/{faq['faq_id']}")
-                        if res.status_code == 200:
-                            st.rerun()
-                        else:
-                            st.error("Error deleting FAQ.")
-                
-                # Inline Edit Form
-                if st.session_state.get(f"edit_mode_{faq['faq_id']}", False):
-                    with st.form(f"form_edit_{faq['faq_id']}"):
-                        e_q = st.text_input("Edit Question", value=faq['question_text'])
-                        e_a = st.text_area("Edit Answer", value=faq['static_answer'])
-                        
-                        categories = ["General", "Medication", "Lab Values", "Procedure"]
-                        initial_idx = categories.index(faq['category']) if faq['category'] in categories else 0
-                        e_c = st.selectbox("Edit Category", categories, index=initial_idx)
-                        
-                        if st.form_submit_button("Update FAQ"):
-                            payload = {"question_text": e_q, "static_answer": e_a, "category": e_c}
-                            res = requests.put(f"{API_URL}/api/m18/faqs/{faq['faq_id']}", json=payload)
-                            if res.status_code == 200:
-                                st.session_state[f"edit_mode_{faq['faq_id']}"] = False
-                                st.success("Updated successfully!")
-                                st.rerun()
-                            else:
-                                st.error("Failed to update.")
-    else:
-        st.info("No FAQs found or backend is offline.")
+        st.markdown("**1. `faq_repository`** — Stores clinical FAQ question-answer pairs")
+        st.code('''# Schema Validation
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["faq_id", "question_text", "static_answer", "category", "template_id"],
+    "properties": {
+      "faq_id":         {"bsonType": "string"},           // Primary Key
+      "question_text":  {"bsonType": "string"},           // Searchable (TEXT index)
+      "static_answer":  {"bsonType": "string"},
+      "category":       {"enum": ["Medication", "Lab Values", "General", "Procedure"]},
+      "template_id":    {"bsonType": "string"}            // FK → question_templates.intent
+    }
+  }
+}
+// Index: TEXT index on "question_text" for full-text search''', language="javascript")
 
-# ── TAB 4: ANSWER TEMPLATES ───────────────────────────────────────────────
+        st.markdown("**2. `question_templates`** — Regex-based intent matching templates")
+        st.code('''# Fields (no formal validator — upserted at startup)
+{
+  "intent":                "patient_history",              // Primary Key
+  "pattern":               "patient.*?history|...",        // Regex pattern
+  "query_log_id":          "log_tmpl_01",
+  "question_type":         "Temporal",                     // Factual | Statistical | Comparative | Temporal
+  "data_source_required":  "Patient_Records_DB",           // Which DB Module 17 queries
+  "answer_id":             "ans_tmpl_text"                  // FK → answer_templates.answer_id
+}''', language="javascript")
+
+        st.markdown("**3. `answer_templates`** — Controls answer rendering format")
+        st.code('''# Schema Validation
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["answer_id", "display_configuration", "format_type"],
+    "properties": {
+      "answer_id":             {"bsonType": "string"},     // Primary Key
+      "display_configuration": {"bsonType": "string"},
+      "format_type":           {"enum": ["Text", "Table", "Chart", "Summary"]}
+    }
+  }
+}''', language="javascript")
+
+        st.markdown("**4. `evidence_logs`** — Audit trail of every query")
+        st.code('''# Schema Validation
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["evidence_id", "source_reference", "confidence_score", "timestamp"],
+    "properties": {
+      "evidence_id":      {"bsonType": "string"},          // Primary Key
+      "source_reference": {"bsonType": "string"},
+      "confidence_score": {"bsonType": "double"},
+      "timestamp":        {"bsonType": "date"}
+    }
+  }
+}''', language="javascript")
+
+        st.markdown("---")
+        st.markdown("#### 🔗 Foreign Key Relationships")
+        st.markdown("""
+| From Collection | Field | → To Collection | Field | Purpose |
+|-----------------|-------|-----------------|-------|---------|
+| `faq_repository` | `template_id` | → `question_templates` | `intent` | Links FAQ to its intent category |
+| `question_templates` | `answer_id` | → `answer_templates` | `answer_id` | Determines answer rendering format |
+""")
+
+        st.markdown("---")
+        st.markdown("#### 📝 Equivalent SQL Schema (CREATE TABLE Statements)")
+        st.code('''-- 1. answer_templates (referenced by question_templates)
+CREATE TABLE answer_templates (
+    answer_id             VARCHAR(50) PRIMARY KEY,
+    display_configuration VARCHAR(255) NOT NULL,
+    format_type           ENUM('Text','Table','Chart','Summary') NOT NULL
+);
+
+-- 2. question_templates (references answer_templates)
+CREATE TABLE question_templates (
+    intent                VARCHAR(100) PRIMARY KEY,
+    pattern               TEXT NOT NULL,
+    query_log_id          VARCHAR(50),
+    question_type         ENUM('Factual','Statistical','Comparative','Temporal'),
+    data_source_required  VARCHAR(100),
+    answer_id             VARCHAR(50),
+    FOREIGN KEY (answer_id) REFERENCES answer_templates(answer_id)
+);
+
+-- 3. faq_repository (references question_templates)
+CREATE TABLE faq_repository (
+    faq_id        VARCHAR(50) PRIMARY KEY,
+    question_text TEXT NOT NULL,
+    static_answer TEXT NOT NULL,
+    category      ENUM('Medication','Lab Values','General','Procedure') NOT NULL,
+    template_id   VARCHAR(100),
+    FOREIGN KEY (template_id) REFERENCES question_templates(intent),
+    FULLTEXT INDEX idx_question_text (question_text)
+);
+
+-- 4. evidence_logs
+CREATE TABLE evidence_logs (
+    evidence_id      VARCHAR(50) PRIMARY KEY,
+    log_id           VARCHAR(100),
+    query            TEXT,
+    match_type       VARCHAR(20),
+    source_reference VARCHAR(255) NOT NULL,
+    confidence_score DOUBLE NOT NULL,
+    timestamp        DATETIME NOT NULL
+);''', language="sql")
+
+    # ── SECTION 3: All Queries — MongoDB, Python & SQL ─────────────────
+    with st.expander("📋 All Queries — MongoDB, Python & SQL Equivalents", expanded=False):
+        st.markdown("Every database query used in this project, with **PyMongo (Python)**, **MongoDB Shell**, and **equivalent SQL** code.")
+        st.markdown("---")
+
+        # Query 1
+        st.markdown("##### Q1. Full-Text Search FAQs (`$text` index)")
+        st.markdown("> **Used in:** `POST /api/m18/ask` — Process 1.0 (FAQ matching)")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('''results = faq_repository.find(
+    {"$text": {"$search": query}},
+    {"score": {"$meta": "textScore"},
+     "faq_id": 1, "question_text": 1,
+     "static_answer": 1, "category": 1,
+     "template_id": 1}
+).sort([("score", {"$meta": "textScore"})]).limit(3)''', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('''db.faq_repository.find(
+  { $text: { $search: "dosage Aspirin" } },
+  { score: { $meta: "textScore" },
+    faq_id: 1, question_text: 1,
+    static_answer: 1, category: 1 }
+).sort({ score: { $meta: "textScore" } }).limit(3)''', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code('''SELECT faq_id, question_text, static_answer, category, template_id,
+       MATCH(question_text) AGAINST('dosage Aspirin') AS score
+FROM faq_repository
+WHERE MATCH(question_text) AGAINST('dosage Aspirin')
+ORDER BY score DESC
+LIMIT 3;''', language="sql")
+
+        st.markdown("---")
+
+        # Query 2
+        st.markdown("##### Q2. Regex Keyword Fallback Search")
+        st.markdown("> **Used in:** `POST /api/m18/ask` — Process 1.0 fallback")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('''regex_pattern = "|".join(
+    re.escape(k) for k in keywords
+)
+candidates = faq_repository.find(
+    {"question_text": {
+        "$regex": regex_pattern,
+        "$options": "i"
+    }},
+    {"faq_id": 1, "question_text": 1,
+     "static_answer": 1, "category": 1,
+     "template_id": 1}
+)''', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('''db.faq_repository.find({
+  question_text: {
+    $regex: "dosage|aspirin",
+    $options: "i"
+  }
+})''', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code('''SELECT faq_id, question_text, static_answer, category, template_id
+FROM faq_repository
+WHERE question_text REGEXP 'dosage|aspirin';''', language="sql")
+
+        st.markdown("---")
+
+        # Query 3
+        st.markdown("##### Q3. Get All FAQs")
+        st.markdown("> **Used in:** `GET /api/m18/faqs`")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('faqs = list(faq_repository.find({}, {"_id": 0}))', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('db.faq_repository.find({}, { _id: 0 })', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code('SELECT faq_id, question_text, static_answer, category, template_id FROM faq_repository;', language="sql")
+
+        st.markdown("---")
+
+        # Query 4
+        st.markdown("##### Q4. Create a New FAQ (INSERT)")
+        st.markdown("> **Used in:** `POST /api/m18/faqs`")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('''faq_repository.insert_one({
+    "faq_id": "faq_010",
+    "question_text": "...",
+    "static_answer": "...",
+    "category": "Medication",
+    "template_id": "qt_med_01"
+})''', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('''db.faq_repository.insertOne({
+  faq_id: "faq_010",
+  question_text: "...",
+  static_answer: "...",
+  category: "Medication",
+  template_id: "qt_med_01"
+})''', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code('''INSERT INTO faq_repository (faq_id, question_text, static_answer, category, template_id)
+VALUES ('faq_010', '...', '...', 'Medication', 'qt_med_01');''', language="sql")
+
+        st.markdown("---")
+
+        # Query 5
+        st.markdown("##### Q5. Update an Existing FAQ (UPDATE)")
+        st.markdown("> **Used in:** `PUT /api/m18/faqs/{faq_id}`")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('''faq_repository.update_one(
+    {"faq_id": faq_id},
+    {"$set": {"question_text": "...",
+              "static_answer": "..."}}
+)''', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('''db.faq_repository.updateOne(
+  { faq_id: "faq_001" },
+  { $set: { question_text: "...",
+            static_answer: "..." } }
+)''', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code('''UPDATE faq_repository
+SET question_text = '...', static_answer = '...'
+WHERE faq_id = 'faq_001';''', language="sql")
+
+        st.markdown("---")
+
+        # Query 6
+        st.markdown("##### Q6. Delete an FAQ (DELETE)")
+        st.markdown("> **Used in:** `DELETE /api/m18/faqs/{faq_id}`")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('faq_repository.delete_one({"faq_id": faq_id})', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('db.faq_repository.deleteOne({ faq_id: "faq_001" })', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code("DELETE FROM faq_repository WHERE faq_id = 'faq_001';", language="sql")
+
+        st.markdown("---")
+
+        # Query 7
+        st.markdown("##### Q7. Check for Duplicate FAQ ID")
+        st.markdown("> **Used in:** `POST /api/m18/faqs` — before insert")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('existing = faq_repository.find_one({"faq_id": faq_id})', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('db.faq_repository.findOne({ faq_id: "faq_010" })', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code("SELECT * FROM faq_repository WHERE faq_id = 'faq_010' LIMIT 1;", language="sql")
+
+        st.markdown("---")
+
+        # Query 8
+        st.markdown("##### Q8. FAQ Count by Category (Aggregation Pipeline)")
+        st.markdown("> **Used in:** `GET /api/m18/faqs/stats`")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('''pipeline = [
+    {"$group": {
+        "_id": "$category",
+        "count": {"$sum": 1}
+    }}
+]
+result = list(
+    faq_repository.aggregate(pipeline)
+)''', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('''db.faq_repository.aggregate([
+  { $group: {
+      _id: "$category",
+      count: { $sum: 1 }
+  }}
+])''', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code('''SELECT category, COUNT(*) AS count
+FROM faq_repository
+GROUP BY category;''', language="sql")
+
+        st.markdown("---")
+
+        # Query 9
+        st.markdown("##### Q9. Get All Question Templates")
+        st.markdown("> **Used in:** `GET /api/m18/templates`")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('templates = list(question_templates.find({}, {"_id": 0}))', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('db.question_templates.find({}, { _id: 0 })', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code('SELECT intent, pattern, query_log_id, question_type, data_source_required, answer_id FROM question_templates;', language="sql")
+
+        st.markdown("---")
+
+        # Query 10
+        st.markdown("##### Q10. Find Question Template by Intent (FK Lookup)")
+        st.markdown("> **Used in:** `POST /api/m18/ask` — Process 3.0 (answer format resolution)")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('''qt_doc = question_templates.find_one(
+    {"intent": template_id}
+)''', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('''db.question_templates.findOne({
+  intent: "medication_guidance"
+})''', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code("SELECT * FROM question_templates WHERE intent = 'medication_guidance';", language="sql")
+
+        st.markdown("---")
+
+        # Query 11
+        st.markdown("##### Q11. Get All Answer Templates")
+        st.markdown("> **Used in:** `GET /api/m18/answer_templates`")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('templates = list(answer_templates.find({}, {"_id": 0}))', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('db.answer_templates.find({}, { _id: 0 })', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code('SELECT answer_id, display_configuration, format_type FROM answer_templates;', language="sql")
+
+        st.markdown("---")
+
+        # Query 12
+        st.markdown("##### Q12. FK Lookup — Answer Template by answer_id")
+        st.markdown("> **Used in:** `POST /api/m18/ask` — Process 3.0 (determines Text/Table/Chart/Summary)")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('''ans_doc = answer_templates.find_one(
+    {"answer_id": qt_doc["answer_id"]}
+)
+format_type = ans_doc["format_type"]''', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('''db.answer_templates.findOne({
+  answer_id: "ans_tmpl_table"
+})''', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code("SELECT * FROM answer_templates WHERE answer_id = 'ans_tmpl_table';", language="sql")
+
+        st.markdown("---")
+
+        # Query 13
+        st.markdown("##### Q13. Insert Evidence Log (Audit Trail)")
+        st.markdown("> **Used in:** `POST /api/m18/ask` — after every query resolution")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('''evidence_logs.insert_one({
+    "log_id": str(uuid.uuid4()),
+    "evidence_id": "ev_abc123",
+    "query": query,
+    "match_type": "exact",
+    "source_reference": "FAQ Repository",
+    "confidence_score": 0.98,
+    "timestamp": datetime.utcnow()
+})''', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('''db.evidence_logs.insertOne({
+  log_id: "...",
+  evidence_id: "ev_abc123",
+  query: "dosage for Aspirin",
+  match_type: "exact",
+  source_reference: "FAQ Repository",
+  confidence_score: 0.98,
+  timestamp: new Date()
+})''', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code('''INSERT INTO evidence_logs (evidence_id, log_id, query, match_type, source_reference, confidence_score, timestamp)
+VALUES ('ev_abc123', UUID(), 'dosage for Aspirin', 'exact', 'FAQ Repository', 0.98, NOW());''', language="sql")
+
+        st.markdown("---")
+
+        # Query 14
+        st.markdown("##### Q14. Usage Analytics — Aggregation Pipeline (GROUP BY + AVG)")
+        st.markdown("> **Used in:** `GET /api/m18/analytics/usage`")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('''pipeline = [
+    {"$group": {
+        "_id": "$match_type",
+        "count": {"$sum": 1},
+        "avg_confidence": {
+            "$avg": "$confidence_score"
+        }
+    }},
+    {"$sort": {"count": -1}}
+]
+result = list(
+    evidence_logs.aggregate(pipeline)
+)''', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('''db.evidence_logs.aggregate([
+  { $group: {
+      _id: "$match_type",
+      count: { $sum: 1 },
+      avg_confidence: {
+        $avg: "$confidence_score"
+      }
+  }},
+  { $sort: { count: -1 } }
+])''', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code('''SELECT match_type, COUNT(*) AS count,
+       AVG(confidence_score) AS avg_confidence
+FROM evidence_logs
+GROUP BY match_type
+ORDER BY count DESC;''', language="sql")
+
+        st.markdown("---")
+
+        # Query 15
+        st.markdown("##### Q15. Schema Validation (Collection Creation)")
+        st.markdown("> **Used in:** `database.py` — `setup_database()` function")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('''db.create_collection(
+    "faq_repository",
+    validator=faq_validator
+)
+# Or modify existing
+db.command(
+    "collMod", "faq_repository",
+    validator=faq_validator
+)''', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('''db.createCollection("faq_repository", {
+  validator: { $jsonSchema: { ... } }
+})
+db.runCommand({
+  collMod: "faq_repository",
+  validator: { $jsonSchema: { ... } }
+})''', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code('''CREATE TABLE faq_repository (
+    faq_id VARCHAR(50) PRIMARY KEY,
+    question_text TEXT NOT NULL,
+    static_answer TEXT NOT NULL,
+    category ENUM('Medication','Lab Values','General','Procedure') NOT NULL,
+    template_id VARCHAR(100) REFERENCES question_templates(intent)
+);''', language="sql")
+
+        st.markdown("---")
+
+        # Query 16
+        st.markdown("##### Q16. Text Index Creation")
+        st.markdown("> **Used in:** `database.py` — enables `$text` search on FAQ questions")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('''from pymongo import TEXT
+faq_repository.create_index(
+    [("question_text", TEXT)],
+    default_language="english"
+)''', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('''db.faq_repository.createIndex(
+  { question_text: "text" },
+  { default_language: "english" }
+)''', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code('ALTER TABLE faq_repository ADD FULLTEXT INDEX idx_question_text (question_text);', language="sql")
+
+        st.markdown("---")
+
+        # Query 17
+        st.markdown("##### Q17. Bulk Insert FAQs")
+        st.markdown("> **Used in:** `database.py` & `seed_faqs.py` — initial data seeding")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('''faq_repository.insert_many([
+    {"faq_id": "faq_001",
+     "question_text": "...",
+     "static_answer": "...",
+     "category": "Medication",
+     "template_id": "qt_med_01"},
+    # ... more documents
+])''', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('''db.faq_repository.insertMany([
+  { faq_id: "faq_001",
+    question_text: "...",
+    static_answer: "...",
+    category: "Medication",
+    template_id: "qt_med_01" },
+  // ... more documents
+])''', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code('''INSERT INTO faq_repository (faq_id, question_text, static_answer, category, template_id)
+VALUES
+  ('faq_001', '...', '...', 'Medication', 'qt_med_01'),
+  ('faq_002', '...', '...', 'Lab Values', 'qt_lab_01'),
+  ('faq_003', '...', '...', 'General', 'qt_gen_01');''', language="sql")
+
+        st.markdown("---")
+
+        # Query 18
+        st.markdown("##### Q18. Upsert Question Templates (INSERT OR UPDATE)")
+        st.markdown("> **Used in:** `database.py` — inserts or updates templates at startup")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Python (PyMongo)**")
+            st.code('''question_templates.update_one(
+    {"intent": template["intent"]},
+    {"$set": template},
+    upsert=True   # Insert if not exists
+)''', language="python")
+        with c2:
+            st.markdown("**MongoDB Shell**")
+            st.code('''db.question_templates.updateOne(
+  { intent: "patient_history" },
+  { $set: { pattern: "...", ... } },
+  { upsert: true }
+)''', language="javascript")
+        st.markdown("**Equivalent SQL**")
+        st.code('''INSERT INTO question_templates (intent, pattern, query_log_id, question_type, data_source_required, answer_id)
+VALUES ('patient_history', '...', 'log_tmpl_01', 'Temporal', 'Patient_Records_DB', 'ans_tmpl_text')
+ON DUPLICATE KEY UPDATE
+  pattern = VALUES(pattern),
+  query_log_id = VALUES(query_log_id),
+  question_type = VALUES(question_type),
+  data_source_required = VALUES(data_source_required),
+  answer_id = VALUES(answer_id);''', language="sql")
+
+    # ── SECTION 5: Triggers & Procedures ──────────────────────────────
+    with st.expander("⚙️ Triggers & Procedures (MongoDB Equivalents)", expanded=False):
+        st.markdown("""
+MongoDB does not have traditional SQL-style triggers or stored procedures.
+However, this project implements **equivalent patterns** that serve the same purpose:
+""")
+        st.markdown("---")
+
+        st.markdown("##### 🔔 Trigger 1: Module 49 Silent Logger (≈ `AFTER INSERT` Trigger)")
+        st.markdown("""
+> **Equivalent to:** SQL `AFTER INSERT ON queries` trigger
+>
+> Every time a query is processed via `/api/m18/ask`, an **async background task**
+> fires and sends the log data to Module 49. This runs silently — it never blocks
+> the API response and output goes only to the server terminal.
+""")
+        st.code('''# backend.py — Async background logger (fires on EVERY /ask call)
+async def send_log_to_module_49(log_data: dict) -> None:
+    """Simulate async POST to Module 49 (never blocks response)."""
+    await asyncio.sleep(0)  # Yield to event-loop
+    sanitized = {
+        "log_id": log_data.get("log_id"),
+        "query": log_data.get("query"),
+        "match_type": log_data.get("match_type", "none"),
+        "confidence_score": log_data.get("confidence_score", 0.0),
+        "source_reference": log_data.get("source_reference", "N/A"),
+        "timestamp": str(log_data.get("timestamp", "")),
+    }
+    print(f"[Module 49 POST /api/m49/usage-log] {json.dumps(sanitized)}")
+
+# Called via:
+asyncio.ensure_future(send_log_to_module_49(log_entry))''', language="python")
+
+        st.markdown("---")
+
+        st.markdown("##### 🛡️ Trigger 2: Schema Validation (≈ `BEFORE INSERT` / `CHECK` Constraint)")
+        st.markdown("""
+> **Equivalent to:** SQL `CHECK` constraint or `BEFORE INSERT` trigger
+>
+> MongoDB schema validators reject any document that doesn't match the defined
+> `$jsonSchema`. This runs **automatically before every insert/update**.
+""")
+        st.code('''# database.py — Schema validation acts as BEFORE INSERT trigger
+faq_validator = {
+    "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["faq_id", "question_text", "static_answer",
+                     "category", "template_id"],
+        "properties": {
+            "category": {
+                "enum": ["Medication", "Lab Values", "General", "Procedure"]
+            }
+            # ... other field constraints
+        }
+    }
+}
+# Applied at collection creation / modification:
+db.create_collection("faq_repository", validator=faq_validator)
+# If a document violates the schema → MongoDB raises WriteError''', language="python")
+
+        st.markdown("---")
+
+        st.markdown("##### 🚀 Procedure 1: Lifespan Startup Hook (≈ Stored Procedure)")
+        st.markdown("""
+> **Equivalent to:** SQL Stored Procedure executed at server startup
+>
+> The FastAPI `lifespan` context manager runs `setup_database()` once when the
+> server starts. This creates collections, applies validators, creates indexes,
+> and seeds initial data — all in one atomic operation.
+""")
+        st.code('''# backend.py — Lifespan hook (runs once on server boot)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Run DB setup once when the server starts."""
+    try:
+        setup_database()  # Creates collections, indexes, seeds data
+    except Exception as e:
+        print(f"WARNING: DB setup failed: {e}")
+    yield
+
+app = FastAPI(title="Clinical Query Copilot API", lifespan=lifespan)''', language="python")
+
+        st.markdown("---")
+
+        st.markdown("##### 🔄 Procedure 2: Upsert Pattern (≈ `INSERT OR UPDATE` Procedure)")
+        st.markdown("""
+> **Equivalent to:** SQL `MERGE` / `INSERT ... ON DUPLICATE KEY UPDATE`
+>
+> Question templates use MongoDB's `upsert=True` flag to insert new templates
+> or update existing ones based on the `intent` field. This ensures idempotent
+> seeding — running it multiple times won't create duplicates.
+""")
+        st.code('''# database.py — Upsert pattern for question templates
+for template in default_templates:
+    question_templates.update_one(
+        {"intent": template["intent"]},   # Match condition
+        {"$set": template},               # Update fields
+        upsert=True                       # Insert if not found
+    )''', language="python")
+
+        st.markdown("---")
+
+        st.markdown("##### 📊 Procedure 3: Aggregation Pipeline (≈ Stored Procedure with GROUP BY)")
+        st.markdown("""
+> **Equivalent to:** SQL Stored Procedure with `GROUP BY` and `AVG()`
+>
+> The analytics endpoint uses MongoDB's aggregation pipeline to compute
+> real-time statistics from `evidence_logs`.
+""")
+        st.code('''# backend.py — Aggregation pipeline (equivalent to stored procedure)
+pipeline = [
+    {"$group": {
+        "_id": "$match_type",
+        "count": {"$sum": 1},
+        "avg_confidence": {"$avg": "$confidence_score"}
+    }},
+    {"$sort": {"count": -1}}
+]
+result = list(evidence_logs.aggregate(pipeline))
+
+# SQL Equivalent:
+# SELECT match_type, COUNT(*) as count,
+#        AVG(confidence_score) as avg_confidence
+# FROM evidence_logs
+# GROUP BY match_type
+# ORDER BY count DESC''', language="python")
+
+# ── TAB 3: ANSWER TEMPLATES ───────────────────────────────────────────────
 with tab_answers:
     st.subheader("🎨 Answer Templates Configuration")
     st.markdown("""
