@@ -156,6 +156,16 @@ with tab_chat:
                     fmt = message.get("format_type", "Text")
                     if fmt == "Table" and isinstance(message.get("content"), list):
                         st.dataframe(pd.DataFrame(message["content"]), use_container_width=True)
+                    elif fmt == "Chart" and isinstance(message.get("content"), list):
+                        try:
+                            df = pd.DataFrame(message["content"])
+                            numeric_cols = df.select_dtypes(include="number").columns.tolist()
+                            if numeric_cols:
+                                st.bar_chart(df.set_index(df.columns[0])[numeric_cols])
+                            else:
+                                st.dataframe(df, use_container_width=True)
+                        except Exception:
+                            st.dataframe(pd.DataFrame(message["content"]), use_container_width=True)
                     elif fmt == "Summary":
                         st.info(message["content"])
                     else:
@@ -494,16 +504,29 @@ async def delete_faq(faq_id: str):
 | `Hospital_Overview_DB` | Doctors, wards, beds, facilities |
 """)
         st.code('''
-# Current mock implementation in backend.py:
-if data_source_required == "Patient_Records_DB":
-    mock_answer = "[Module 17] Patient: 45yo male, Type 2 DM, HbA1c 7.2%"
-elif data_source_required == "Pharmacy_DB":
-    mock_answer = "[Module 17] Metformin: GI upset, nausea. Take with meals."
-
-# Future real integration:
-# response = requests.get("http://module17/api/m17/clinical-data",
-#     params={"source": data_source_required})
-# real_data = response.json()
+# Realistic API call + mock fallback (backend.py):
+def fetch_module_17_data(intent_type, parsed_entities):
+    try:
+        resp = requests.get(
+            "http://module17-api:8080/data",
+            params={"intent": intent_type, "source": parsed_entities.get("data_source")},
+            timeout=2,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except requests.exceptions.RequestException:
+        # Mock fallback when Module 17 is unavailable
+        if intent_type == "comparative_analysis":
+            return [
+                {"Metric": "Avg Recovery Days", "Aspirin": 4.2, "Ibuprofen": 3.8},
+                {"Metric": "Side Effect Rate", "Aspirin": "12%", "Ibuprofen": "18%"},
+            ]
+        elif intent_type == "statistical_query":
+            return [
+                {"Symptom": "Fever", "Count": 142, "Avg_Recovery_Days": 3.2},
+                {"Symptom": "Cough", "Count": 89, "Avg_Recovery_Days": 5.1},
+            ]
+        # ... more intent-specific mocks ...
 ''', language="python")
 
     with st.expander("💻 Module 49 integration — Silent async logging"):

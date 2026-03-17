@@ -190,6 +190,11 @@ def setup_database():
                 "answer_id": "ans_tmpl_summary",
                 "display_configuration": "Bullet point highlighted summary",
                 "format_type": "Summary"
+            },
+            {
+                "answer_id": "ans_tmpl_chart",
+                "display_configuration": "Render as bar chart visualisation",
+                "format_type": "Chart"
             }
         ])
 
