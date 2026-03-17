@@ -5,7 +5,7 @@ from dashboards.patient_dashboard import patient_dashboard
 from dashboards.doctor_dashboard import doctor_dashboard
 from dashboards.admin_dashboard import admin_dashboard
 # ---------------- PAGE CONFIG ----------------
-st.set_page_config(page_title="MediCare", layout="wide")
+st.set_page_config(page_title="Hospital QA System",page_icon="🏥",layout="wide")
 
 # ---------------- SESSION STATE INIT ----------------
 st.session_state.setdefault("logged_in", False)
@@ -29,3 +29,5 @@ if st.session_state.page == "login":
     login_page()
 elif st.session_state.page == "signup":
     signup_page()
+else:
+    st.warning("⚠️ Something went wrong. Please login again.")

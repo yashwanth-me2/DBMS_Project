@@ -2,6 +2,8 @@
 import streamlit as st
 from components.sidebar import sidebar
 from components.charts import patient_line_chart, appointment_donut_chart
+from database import insert_patient, create_table
+import time
 
 # All categories and their modules
 CATEGORIES = {
@@ -130,6 +132,9 @@ CATEGORIES = {
 }
 
 def patient_dashboard():
+
+    create_table()
+
     st.session_state.setdefault("view", "main")
     st.session_state.setdefault("selected_category", None)
     st.session_state.setdefault("selected_module", None)
@@ -372,19 +377,39 @@ def show_module_detail():
     
     if tab == "🏠 Home":
         st.info(f"**{name}** - {desc}")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### Input Entities")
+        st.success("1️⃣ Patient Form")
+        st.success("2️⃣ Insurance Details")
+        st.success("3️⃣ Emergency Contact")
+
+        # 🔥 patient details
+        st.markdown("### Enter Patient Details")
+        patient_name = st.text_input("Patient Name")
+        age = st.number_input("Age", min_value=0, max_value=120)
+
         
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("### Input Entities")
-            st.success("1️⃣ Patient Form")
-            st.success("2️⃣ Insurance Details")
-            st.success("3️⃣ Emergency Contact")
-        
-        with col2:
-            st.markdown("### Output Entities")
-            st.success("1️⃣ Patient Record")
-            st.success("2️⃣ Admission Summary")
-            st.success("3️⃣ Patient ID")
+    if st.button("Submit"):
+        if patient_name == "":
+            st.warning("Please enter patient name")
+        else:
+            with st.spinner("Saving patient data..."):
+                
+                time.sleep(2)
+
+                insert_patient(patient_name, age)
+
+                st.success(f"Patient {patient_name} saved to database!")
+    with col2:
+        st.markdown("### Output Entities")
+        st.success("1️⃣ Patient Record")
+        st.success("2️⃣ Admission Summary")
+        st.success("3️⃣ Patient ID")
+
+    if tab == "🏠 Home":
+        st.info("...")
     
     elif tab == "🔗 ER Diagram":
         st.markdown("### Entity Relationship Diagram")
