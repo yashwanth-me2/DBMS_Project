@@ -155,7 +155,8 @@ with tab_chat:
                 if message["role"] == "assistant":
                     fmt = message.get("format_type", "Text")
                     if fmt == "Table" and isinstance(message.get("content"), list):
-                        st.dataframe(pd.DataFrame(message["content"]), use_container_width=True)
+                        df = pd.DataFrame(message["content"])
+                        st.dataframe(df.astype(str), use_container_width=True)
                     elif fmt == "Chart" and isinstance(message.get("content"), list):
                         try:
                             df = pd.DataFrame(message["content"])
@@ -163,9 +164,9 @@ with tab_chat:
                             if numeric_cols:
                                 st.bar_chart(df.set_index(df.columns[0])[numeric_cols])
                             else:
-                                st.dataframe(df, use_container_width=True)
+                                st.dataframe(df.astype(str), use_container_width=True)
                         except Exception:
-                            st.dataframe(pd.DataFrame(message["content"]), use_container_width=True)
+                            st.dataframe(pd.DataFrame(message["content"]).astype(str), use_container_width=True)
                     elif fmt == "Summary":
                         st.info(message["content"])
                     else:

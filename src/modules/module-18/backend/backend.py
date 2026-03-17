@@ -107,7 +107,7 @@ def fetch_module_17_data(intent_type: str, parsed_entities: dict):
 
     if intent_type == "dashboard_stats":
         return [
-            {"Metric": "Total Doctors", "Value": 145},
+            {"Metric": "Total Doctors", "Value": 149},
             {"Metric": "Active Wards", "Value": 22},
             {"Metric": "Total Beds", "Value": 500},
             {"Metric": "Available Beds", "Value": 42},
