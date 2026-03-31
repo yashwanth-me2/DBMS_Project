@@ -21,7 +21,7 @@ module-18/
 ├── backend/
 │   ├── __init__.py
 │   └── backend.py                # FastAPI app — all API routes & QA pipeline
-│
+│ 
 ├── frontend/
 │   ├── __init__.py
 │   └── frontend.py               # Streamlit UI — Chatbot, Dashboard, FAQs, Templates, API
@@ -38,6 +38,7 @@ module-18/
 When a user types a query in the **💬 Chatbot** tab and presses Enter, the following pipeline executes:
 
 ### Step 1 · User Input Captured
+
 The Streamlit frontend captures the query string and sends an HTTP `POST` request to the FastAPI backend at `/api/m18/ask`.
 
 ### Step 2 · Process 1.0 — FAQ Repository Search (MongoDB `$text` Index)

@@ -82,9 +82,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab_chat, tab_dash, tab_answers, tab_api = st.tabs([
+tab_chat, tab_dash, tab_faqs, tab_answers, tab_api = st.tabs([
     "💬 Chatbot", 
     "📊 Dashboard", 
+    "📝 Manage FAQs",
     "🎨 Answer Templates",
     "🔌 API Reference"
 ])
@@ -939,7 +940,161 @@ result = list(evidence_logs.aggregate(pipeline))
 # GROUP BY match_type
 # ORDER BY count DESC''', language="python")
 
-# ── TAB 3: ANSWER TEMPLATES ───────────────────────────────────────────────
+# ── TAB 3: MANAGE FAQS ────────────────────────────────────────────────────
+with tab_faqs:
+    st.subheader("📝 Manage Knowledge Base FAQs")
+    st.markdown("Add, edit, or delete Question-Answer pairs from the FAQ repository.")
+    
+    # Session state for FAQ edit mode
+    if "faq_edit_mode" not in st.session_state:
+        st.session_state.faq_edit_mode = False
+    if "faq_edit_data" not in st.session_state:
+        st.session_state.faq_edit_data = {}
+
+    # Fetch existing FAQs
+    try:
+        res = requests.get(f"{API_URL}/api/m18/faqs")
+        faqs = res.json().get("data", []) if res.status_code == 200 else []
+    except Exception:
+        faqs = []
+
+    # Two columns: List of FAQs on left, Form on right
+    l_col, r_col = st.columns([2, 1])
+
+    with l_col:
+        st.markdown("#### 📚 Current FAQs")
+        if faqs:
+            df = pd.DataFrame(faqs)
+            
+            # Interactive selection for edit/delete
+            st.dataframe(
+                df, 
+                use_container_width=True, 
+                height=400,
+                hide_index=True
+            )
+            
+            st.markdown("💡 *To edit or delete an FAQ, enter its ID in the form on the right.*")
+        else:
+            st.info("No FAQs found in database.")
+
+    with r_col:
+        action = st.radio("Action", ["➕ Add New FAQ", "✏️ Edit / Delete FAQ"], horizontal=True)
+        
+        # Ensure we have templates to choose from
+        template_ids = []
+        try:
+            t_res = requests.get(f"{API_URL}/api/m18/templates")
+            if t_res.status_code == 200:
+                template_ids = [t["intent"] for t in t_res.json().get("data", [])]
+        except Exception:
+            pass
+            
+        categories = ["Medication", "Lab Values", "General", "Procedure"]
+
+        if action == "➕ Add New FAQ":
+            with st.form("add_faq_form", clear_on_submit=True):
+                new_id = st.text_input("FAQ ID (e.g., faq_001)", placeholder="Must be unique")
+                new_q = st.text_area("Question", placeholder="e.g., How to take Aspirin?")
+                new_a = st.text_area("Answer", placeholder="e.g., Take one pill daily with food.")
+                new_cat = st.selectbox("Category", categories)
+                
+                # Fetch templates for dropdown if they exist, else allow text input
+                if template_ids:
+                    new_tmpl = st.selectbox("Intent Template", template_ids)
+                else:
+                    new_tmpl = st.text_input("Intent Template ID")
+                
+                submitted = st.form_submit_button("Submit FAQ", use_container_width=True, type="primary")
+                
+                if submitted:
+                    if new_id and new_q and new_a and new_tmpl:
+                        payload = {
+                            "faq_id": new_id,
+                            "question_text": new_q,
+                            "static_answer": new_a,
+                            "category": new_cat,
+                            "template_id": new_tmpl
+                        }
+                        try:
+                            # st.toast guarantees a notification without needing full page reload output
+                            post_res = requests.post(f"{API_URL}/api/m18/faqs", json=payload)
+                            if post_res.status_code == 200:
+                                st.success(f"Successfully added FAQ: {new_id}")
+                                st.rerun()  # Refresh the page to update table
+                            else:
+                                err = post_res.json().get("detail", "Error adding FAQ")
+                                st.error(err)
+                        except Exception as e:
+                            st.error(f"Connection error: {e}")
+                    else:
+                        st.warning("All fields are required.")
+                        
+        else:  # Edit / Delete mode
+            with st.container(border=True):
+                st.markdown("#### Edit or Delete FAQ")
+                
+                # Search for FAQ ID to edit
+                edit_id = st.text_input("Enter FAQ ID to manage")
+                
+                # Find the target FAQ in our local list if ID is provided
+                target_faq = next((f for f in faqs if f.get("faq_id") == edit_id), None)
+                
+                if edit_id and not target_faq:
+                    st.warning(f"No FAQ found with ID '{edit_id}'")
+                    
+                if target_faq:
+                    with st.form("edit_faq_form"):
+                        st.info(f"Editing: {edit_id}")
+                        e_q = st.text_area("Question", value=target_faq.get("question_text", ""))
+                        e_a = st.text_area("Answer", value=target_faq.get("static_answer", ""))
+                        
+                        e_cat_idx = categories.index(target_faq.get("category")) if target_faq.get("category") in categories else 0
+                        e_cat = st.selectbox("Category", categories, index=e_cat_idx)
+                        
+                        tmpl_val = target_faq.get("template_id", "")
+                        if template_ids:
+                            e_tmpl_idx = template_ids.index(tmpl_val) if tmpl_val in template_ids else 0
+                            e_tmpl = st.selectbox("Intent Template", template_ids, index=e_tmpl_idx)
+                        else:
+                            e_tmpl = st.text_input("Intent Template ID", value=tmpl_val)
+                            
+                        col_upd, col_del = st.columns(2)
+                        with col_upd:
+                            update_btn = st.form_submit_button("Update FAQ", type="primary", use_container_width=True)
+                        with col_del:
+                            delete_btn = st.form_submit_button("Delete FAQ", use_container_width=True)
+                            
+                        if update_btn:
+                            payload = {
+                                "faq_id": edit_id,
+                                "question_text": e_q,
+                                "static_answer": e_a,
+                                "category": e_cat,
+                                "template_id": e_tmpl
+                            }
+                            try:
+                                put_res = requests.put(f"{API_URL}/api/m18/faqs/{edit_id}", json=payload)
+                                if put_res.status_code == 200:
+                                    st.success("Successfully updated FAQ.")
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to update FAQ.")
+                            except Exception as e:
+                                st.error(f"Error: {e}")
+                                
+                        if delete_btn:
+                            try:
+                                del_res = requests.delete(f"{API_URL}/api/m18/faqs/{edit_id}")
+                                if del_res.status_code == 200:
+                                    st.success("Successfully deleted FAQ.")
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to delete FAQ.")
+                            except Exception as e:
+                                st.error(f"Error: {e}")
+
+# ── TAB 4: ANSWER TEMPLATES ───────────────────────────────────────────────
 with tab_answers:
     st.subheader("🎨 Answer Templates Configuration")
     st.markdown("""
