@@ -143,7 +143,7 @@ with tab_chat:
             ]
             for i, sq in enumerate(sample_questions):
                 col = qcol1 if i % 2 == 0 else qcol2
-                if col.button(f"💬 {sq}", key=f"sq_{i}", use_container_width=True):
+                if col.button(f"💬 {sq}", key=f"sq_{i}", width="stretch"):
                     st.session_state["_prefill_query"] = sq
                     st.rerun()
         
@@ -154,7 +154,7 @@ with tab_chat:
                     fmt = message.get("format_type", "Text")
                     if fmt == "Table" and isinstance(message.get("content"), list):
                         df = pd.DataFrame(message["content"])
-                        st.dataframe(df.astype(str), use_container_width=True)
+                        st.dataframe(df.astype(str), width="stretch")
                     elif fmt == "Chart" and isinstance(message.get("content"), list):
                         try:
                             df = pd.DataFrame(message["content"])
@@ -162,9 +162,9 @@ with tab_chat:
                             if numeric_cols:
                                 st.bar_chart(df.set_index(df.columns[0])[numeric_cols])
                             else:
-                                st.dataframe(df.astype(str), use_container_width=True)
+                                st.dataframe(df.astype(str), width="stretch")
                         except Exception:
-                            st.dataframe(pd.DataFrame(message["content"]).astype(str), use_container_width=True)
+                            st.dataframe(pd.DataFrame(message["content"]).astype(str), width="stretch")
                     elif fmt == "Summary":
                         st.info(message["content"])
                     else:
@@ -1082,9 +1082,9 @@ with tab_faqs:
 
                     save_col, cancel_col = st.columns(2)
                     with save_col:
-                        save_btn = st.form_submit_button("Save", type="primary", use_container_width=True)
+                        save_btn = st.form_submit_button("Save", type="primary", width="stretch")
                     with cancel_col:
-                        cancel_btn = st.form_submit_button("Cancel", use_container_width=True)
+                        cancel_btn = st.form_submit_button("Cancel", width="stretch")
 
                     if save_btn:
                         payload = {"question_text": e_q, "static_answer": e_a, "category": e_cat}
@@ -1117,7 +1117,7 @@ with tab_answers:
             ans_templates = res.json().get("data", [])
             if ans_templates:
                 df = pd.DataFrame(ans_templates)
-                st.dataframe(df, use_container_width=True)
+                st.dataframe(df, width="stretch")
             else:
                 st.info("No answer templates found in database.")
     except Exception as e:
