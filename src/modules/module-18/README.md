@@ -11,8 +11,7 @@
 ```
 module-18/
 ├── .env                          # MongoDB Atlas connection string
-├── app.py                        # Entry point (imports backend)
-├── run.py                        # Alternative entry point
+├── app.py                        # Entry point — starts both backend & frontend
 ├── start.sh                      # Shell script to start both servers
 ├── requirements.txt              # Python dependencies
 ├── seed_faqs.py                  # Bulk-insert 150+ FAQs

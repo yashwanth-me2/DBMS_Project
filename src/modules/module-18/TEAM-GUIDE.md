@@ -9,7 +9,7 @@
 
 ```
 module-18/
-├── run.py                  # Single entry point — starts both backend & frontend
+├── app.py                  # Single entry point — starts both backend & frontend
 ├── requirements.txt        # Python dependencies
 ├── .env                    # MongoDB connection string (not committed to git)
 ├── database/
@@ -137,7 +137,7 @@ echo 'MONGO_URI="mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?appN
 
 ### Step 5: Run the Application
 ```bash
-python3 run.py
+python3 app.py
 ```
 This **single command** does everything:
 1. Starts the **FastAPI backend** on `http://localhost:8000`

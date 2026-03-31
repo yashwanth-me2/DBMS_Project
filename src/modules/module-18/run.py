@@ -2,7 +2,7 @@ import subprocess
 import sys
 import time
 import os
-
+tf
 def main():
     print("🏥 Starting Module 18 - Clinical QA System...")
     

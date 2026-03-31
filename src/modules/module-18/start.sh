@@ -15,4 +15,4 @@ if [ -d "venv" ]; then
 fi
 
 echo "🏥 Starting Module 18 — Clinical QA System..."
-python3 run.py
+python3 app.py

@@ -33,35 +33,33 @@ st.markdown("""
         border-radius: 20px;
     }
 
-    /* Refresh button — premium styling */
+    /* Refresh button — clean, subtle styling */
     .refresh-btn {
         display: inline-flex;
         align-items: center;
-        gap: 7px;
-        padding: 9px 22px;
-        border: none;
-        border-radius: 26px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: #fff;
+        gap: 6px;
+        padding: 8px 18px;
+        border: 1.5px solid #667eea;
+        border-radius: 10px;
+        background: transparent;
+        color: #667eea;
         font-size: 13px;
         font-weight: 600;
         letter-spacing: 0.3px;
         cursor: pointer;
-        transition: all 0.25s ease;
+        transition: all 0.2s ease;
         text-decoration: none;
         float: right;
         margin-top: 14px;
-        box-shadow: 0 2px 10px rgba(102,126,234,0.25);
     }
     .refresh-btn:hover {
-        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        background: #667eea;
         color: #fff;
-        box-shadow: 0 4px 18px rgba(102,126,234,0.40);
-        transform: translateY(-2px);
+        box-shadow: 0 2px 12px rgba(102,126,234,0.30);
+        transform: translateY(-1px);
     }
     .refresh-btn:active {
         transform: translateY(0);
-        box-shadow: 0 1px 6px rgba(102,126,234,0.20);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -76,7 +74,7 @@ st.markdown(
     '    </p>'
     '  </div>'
     '  <a class="refresh-btn" href="/" target="_self">'
-    '    \U0001f504 Refresh'
+    '    Refresh'
     '  </a>'
     '</div>',
     unsafe_allow_html=True,
@@ -942,157 +940,167 @@ result = list(evidence_logs.aggregate(pipeline))
 
 # ── TAB 3: MANAGE FAQS ────────────────────────────────────────────────────
 with tab_faqs:
-    st.subheader("📝 Manage Knowledge Base FAQs")
-    st.markdown("Add, edit, or delete Question-Answer pairs from the FAQ repository.")
-    
-    # Session state for FAQ edit mode
-    if "faq_edit_mode" not in st.session_state:
-        st.session_state.faq_edit_mode = False
-    if "faq_edit_data" not in st.session_state:
-        st.session_state.faq_edit_data = {}
+    # ── Custom CSS for FAQ cards ──
+    st.markdown("""
+    <style>
+    .faq-header {
+        display: flex; justify-content: space-between; align-items: center;
+        margin-bottom: 8px;
+    }
+    .faq-header h2 { margin: 0; font-size: 22px; }
+    .faq-stats-bar {
+        display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px;
+    }
+    .faq-stat-chip {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 6px 16px; border-radius: 20px; font-size: 13px;
+        font-weight: 600; letter-spacing: 0.2px;
+    }
+    .faq-card-top {
+        display: flex; justify-content: space-between; align-items: flex-start;
+        margin-bottom: 8px;
+    }
+    .faq-id-badge {
+        font-size: 11px; font-weight: 700; padding: 3px 10px;
+        border-radius: 8px; letter-spacing: 0.5px;
+        background: rgba(102,126,234,0.15); color: #5b7bd5;
+    }
+    .faq-cat-badge {
+        font-size: 11px; font-weight: 600; padding: 3px 12px;
+        border-radius: 12px; letter-spacing: 0.3px;
+    }
+    .cat-medication { background: rgba(220,80,80,0.12); color: #c94444; }
+    .cat-lab-values { background: rgba(60,160,200,0.12); color: #2e8eb0; }
+    .cat-general    { background: rgba(60,180,120,0.12); color: #2ea06a; }
+    .cat-procedure  { background: rgba(200,170,60,0.12); color: #a08c2e; }
+    .faq-question {
+        font-size: 15px; font-weight: 600; margin-bottom: 6px;
+        line-height: 1.4;
+    }
+    .faq-answer {
+        font-size: 13.5px; opacity: 0.7;
+        line-height: 1.55;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    # Fetch existing FAQs
+    # ── Session state ──
+    if "faq_editing_id" not in st.session_state:
+        st.session_state.faq_editing_id = None
+
+    # ── Fetch FAQs ──
     try:
         res = requests.get(f"{API_URL}/api/m18/faqs")
         faqs = res.json().get("data", []) if res.status_code == 200 else []
     except Exception:
         faqs = []
 
-    # Two columns: List of FAQs on left, Form on right
-    l_col, r_col = st.columns([2, 1])
+    # ── Fetch templates for edit form ──
+    template_ids = []
+    try:
+        t_res = requests.get(f"{API_URL}/api/m18/templates")
+        if t_res.status_code == 200:
+            template_ids = [t["intent"] for t in t_res.json().get("data", [])]
+    except Exception:
+        pass
+    categories = ["Medication", "Lab Values", "General", "Procedure"]
 
-    with l_col:
-        st.markdown("#### 📚 Current FAQs")
-        if faqs:
-            df = pd.DataFrame(faqs)
-            
-            # Interactive selection for edit/delete
-            st.dataframe(
-                df, 
-                use_container_width=True, 
-                height=400,
-                hide_index=True
-            )
-            
-            st.markdown("💡 *To edit or delete an FAQ, enter its ID in the form on the right.*")
-        else:
-            st.info("No FAQs found in database.")
+    # ── Header & stats ──
+    st.markdown('<div class="faq-header"><h2>Knowledge Base FAQs</h2></div>', unsafe_allow_html=True)
 
-    with r_col:
-        action = st.radio("Action", ["➕ Add New FAQ", "✏️ Edit / Delete FAQ"], horizontal=True)
-        
-        # Ensure we have templates to choose from
-        template_ids = []
-        try:
-            t_res = requests.get(f"{API_URL}/api/m18/templates")
-            if t_res.status_code == 200:
-                template_ids = [t["intent"] for t in t_res.json().get("data", [])]
-        except Exception:
-            pass
-            
-        categories = ["Medication", "Lab Values", "General", "Procedure"]
+    # Category color mapping
+    cat_colors = {
+        "Medication": ("💊", "#f28b8b", "rgba(234,102,102,0.12)"),
+        "Lab Values": ("🧪", "#7dd4e8", "rgba(102,200,234,0.12)"),
+        "General":    ("📋", "#7de8a8", "rgba(102,234,162,0.12)"),
+        "Procedure":  ("🔬", "#e8d47d", "rgba(234,200,102,0.12)"),
+    }
+    # Count per category
+    cat_counts = {}
+    for f in faqs:
+        c = f.get("category", "General")
+        cat_counts[c] = cat_counts.get(c, 0) + 1
 
-        if action == "➕ Add New FAQ":
-            with st.form("add_faq_form", clear_on_submit=True):
-                new_id = st.text_input("FAQ ID (e.g., faq_001)", placeholder="Must be unique")
-                new_q = st.text_area("Question", placeholder="e.g., How to take Aspirin?")
-                new_a = st.text_area("Answer", placeholder="e.g., Take one pill daily with food.")
-                new_cat = st.selectbox("Category", categories)
-                
-                # Fetch templates for dropdown if they exist, else allow text input
-                if template_ids:
-                    new_tmpl = st.selectbox("Intent Template", template_ids)
-                else:
-                    new_tmpl = st.text_input("Intent Template ID")
-                
-                submitted = st.form_submit_button("Submit FAQ", use_container_width=True, type="primary")
-                
-                if submitted:
-                    if new_id and new_q and new_a and new_tmpl:
-                        payload = {
-                            "faq_id": new_id,
-                            "question_text": new_q,
-                            "static_answer": new_a,
-                            "category": new_cat,
-                            "template_id": new_tmpl
-                        }
-                        try:
-                            # st.toast guarantees a notification without needing full page reload output
-                            post_res = requests.post(f"{API_URL}/api/m18/faqs", json=payload)
-                            if post_res.status_code == 200:
-                                st.success(f"Successfully added FAQ: {new_id}")
-                                st.rerun()  # Refresh the page to update table
-                            else:
-                                err = post_res.json().get("detail", "Error adding FAQ")
-                                st.error(err)
-                        except Exception as e:
-                            st.error(f"Connection error: {e}")
-                    else:
-                        st.warning("All fields are required.")
-                        
-        else:  # Edit / Delete mode
+    chips_html = ""
+    for cat, count in cat_counts.items():
+        icon, color, bg = cat_colors.get(cat, ("📋", "#aaa", "rgba(255,255,255,0.06)"))
+        chips_html += f'<span class="faq-stat-chip" style="background:{bg};color:{color};">{icon} {cat}: {count}</span>'
+    total_chip = f'<span class="faq-stat-chip" style="background:rgba(102,126,234,0.12);color:#8ea4f7;">📚 Total: {len(faqs)}</span>'
+    st.markdown(f'<div class="faq-stats-bar">{total_chip}{chips_html}</div>', unsafe_allow_html=True)
+
+    # ── Search & Filter ──
+    filter_col1, filter_col2 = st.columns([3, 1])
+    with filter_col1:
+        search_q = st.text_input("🔍 Search FAQs", placeholder="Type to search questions or answers...", label_visibility="collapsed")
+    with filter_col2:
+        filter_cat = st.selectbox("Filter", ["All Categories"] + categories, label_visibility="collapsed")
+
+    # Apply filters
+    filtered_faqs = faqs
+    if search_q:
+        sq_lower = search_q.lower()
+        filtered_faqs = [f for f in filtered_faqs if sq_lower in f.get("question_text", "").lower() or sq_lower in f.get("static_answer", "").lower()]
+    if filter_cat != "All Categories":
+        filtered_faqs = [f for f in filtered_faqs if f.get("category") == filter_cat]
+
+    st.caption(f"Showing {len(filtered_faqs)} of {len(faqs)} FAQs")
+
+    # ── FAQ Cards ──
+    if not filtered_faqs:
+        st.info("No FAQs match your search criteria." if search_q or filter_cat != "All Categories" else "No FAQs found in database.")
+    else:
+        for idx, faq in enumerate(filtered_faqs):
+            faq_id = faq.get("faq_id", "")
+            cat = faq.get("category", "General")
+            cat_class = cat.lower().replace(" ", "-")
+            icon, _, _ = cat_colors.get(cat, ("📋", "#aaa", ""))
+
+            # ── Streamlit Container Card ──
             with st.container(border=True):
-                st.markdown("#### Edit or Delete FAQ")
-                
-                # Search for FAQ ID to edit
-                edit_id = st.text_input("Enter FAQ ID to manage")
-                
-                # Find the target FAQ in our local list if ID is provided
-                target_faq = next((f for f in faqs if f.get("faq_id") == edit_id), None)
-                
-                if edit_id and not target_faq:
-                    st.warning(f"No FAQ found with ID '{edit_id}'")
-                    
-                if target_faq:
-                    with st.form("edit_faq_form"):
-                        st.info(f"Editing: {edit_id}")
-                        e_q = st.text_area("Question", value=target_faq.get("question_text", ""))
-                        e_a = st.text_area("Answer", value=target_faq.get("static_answer", ""))
-                        
-                        e_cat_idx = categories.index(target_faq.get("category")) if target_faq.get("category") in categories else 0
-                        e_cat = st.selectbox("Category", categories, index=e_cat_idx)
-                        
-                        tmpl_val = target_faq.get("template_id", "")
-                        if template_ids:
-                            e_tmpl_idx = template_ids.index(tmpl_val) if tmpl_val in template_ids else 0
-                            e_tmpl = st.selectbox("Intent Template", template_ids, index=e_tmpl_idx)
-                        else:
-                            e_tmpl = st.text_input("Intent Template ID", value=tmpl_val)
-                            
-                        col_upd, col_del = st.columns(2)
-                        with col_upd:
-                            update_btn = st.form_submit_button("Update FAQ", type="primary", use_container_width=True)
-                        with col_del:
-                            delete_btn = st.form_submit_button("Delete FAQ", use_container_width=True)
-                            
-                        if update_btn:
-                            payload = {
-                                "faq_id": edit_id,
-                                "question_text": e_q,
-                                "static_answer": e_a,
-                                "category": e_cat,
-                                "template_id": e_tmpl
-                            }
-                            try:
-                                put_res = requests.put(f"{API_URL}/api/m18/faqs/{edit_id}", json=payload)
-                                if put_res.status_code == 200:
-                                    st.success("Successfully updated FAQ.")
-                                    st.rerun()
-                                else:
-                                    st.error("Failed to update FAQ.")
-                            except Exception as e:
-                                st.error(f"Error: {e}")
-                                
-                        if delete_btn:
-                            try:
-                                del_res = requests.delete(f"{API_URL}/api/m18/faqs/{edit_id}")
-                                if del_res.status_code == 200:
-                                    st.success("Successfully deleted FAQ.")
-                                    st.rerun()
-                                else:
-                                    st.error("Failed to delete FAQ.")
-                            except Exception as e:
-                                st.error(f"Error: {e}")
+                st.markdown(f"""
+                <div class="faq-card-top">
+                    <span class="faq-id-badge">{faq_id}</span>
+                    <span class="faq-cat-badge cat-{cat_class}">{cat}</span>
+                </div>
+                <div class="faq-question">{faq.get("question_text", "")}</div>
+                <div class="faq-answer">{faq.get("static_answer", "")}</div>
+                """, unsafe_allow_html=True)
+
+                # ── Edit button (inside the native container) ──
+                if st.session_state.faq_editing_id != faq_id:
+                    if st.button("Edit", key=f"edit_{faq_id}_{idx}", help=f"Edit {faq_id}"):
+                        st.session_state.faq_editing_id = faq_id
+                        st.rerun()
+
+            # ── Inline Edit Form ──
+            if st.session_state.faq_editing_id == faq_id:
+                with st.form(f"edit_form_{faq_id}"):
+                    e_q = st.text_area("Question", value=faq.get("question_text", ""), key=f"eq_{faq_id}")
+                    e_a = st.text_area("Answer", value=faq.get("static_answer", ""), key=f"ea_{faq_id}")
+                    e_cat_idx = categories.index(cat) if cat in categories else 0
+                    e_cat = st.selectbox("Category", categories, index=e_cat_idx, key=f"ec_{faq_id}")
+
+                    save_col, cancel_col = st.columns(2)
+                    with save_col:
+                        save_btn = st.form_submit_button("Save", type="primary", use_container_width=True)
+                    with cancel_col:
+                        cancel_btn = st.form_submit_button("Cancel", use_container_width=True)
+
+                    if save_btn:
+                        payload = {"question_text": e_q, "static_answer": e_a, "category": e_cat}
+                        try:
+                            put_res = requests.put(f"{API_URL}/api/m18/faqs/{faq_id}", json=payload)
+                            if put_res.status_code == 200:
+                                st.session_state.faq_editing_id = None
+                                st.toast(f"Updated {faq_id}")
+                                st.rerun()
+                            else:
+                                st.error("Failed to update FAQ.")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+                    if cancel_btn:
+                        st.session_state.faq_editing_id = None
+                        st.rerun()
 
 # ── TAB 4: ANSWER TEMPLATES ───────────────────────────────────────────────
 with tab_answers:
