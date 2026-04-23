@@ -11,7 +11,7 @@ import streamlit as st
 def start_backend():
     # Only start if the API isn't already accessible (e.g. from app.py or if already running)
     try:
-        if requests.get("http://localhost:8000/api/m18/faqs/stats", timeout=1).status_code == 200:
+        if requests.get("http://localhost:8000/api/m18/faqs/stats", timeout=2).status_code == 200:
             return None
     except:
         pass
@@ -24,14 +24,43 @@ def start_backend():
         python_exe = venv_python
     else:
         python_exe = sys.executable
-        
-    process = subprocess.Popen(
-        [python_exe, "-m", "uvicorn", "backend.backend:app", "--host", "0.0.0.0", "--port", "8000"],
-        cwd=module_root,
-        stdout=open(os.path.join(module_root, "uvicorn.log"), "w"),
-        stderr=subprocess.STDOUT
-    )
-    time.sleep(4) # Wait for startup and DB connection
+
+    # Write log to /tmp (always writable, even on Streamlit Cloud)
+    log_path = "/tmp/uvicorn.log"
+    try:
+        log_file = open(log_path, "w")
+    except Exception:
+        log_file = subprocess.DEVNULL
+
+    try:
+        process = subprocess.Popen(
+            [python_exe, "-m", "uvicorn", "backend.backend:app", "--host", "0.0.0.0", "--port", "8000"],
+            cwd=module_root,
+            stdout=log_file,
+            stderr=subprocess.STDOUT
+        )
+    except Exception as e:
+        print(f"❌ Failed to start backend: {e}")
+        return None
+
+    # Wait and retry health check (Cloud can be slower)
+    for i in range(8):
+        time.sleep(2)
+        try:
+            if requests.get("http://localhost:8000/api/m18/faqs/stats", timeout=2).status_code == 200:
+                print("✅ Backend is online!")
+                return process
+        except:
+            print(f"⏳ Waiting for backend... ({(i+1)*2}s)")
+    
+    # Print log contents for debugging if backend didn't start
+    try:
+        with open(log_path) as f:
+            print(f"📋 Backend log:\n{f.read()}")
+    except:
+        pass
+    
+    print("⚠️ Backend may not have started correctly, continuing anyway...")
     return process
 
 # Initialize backend once per session
