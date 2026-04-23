@@ -9,7 +9,18 @@ from dotenv import load_dotenv
 _env_path = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(dotenv_path=_env_path)
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+# Streamlit Cloud uses st.secrets instead of .env files
+# Check st.secrets first, then fall back to environment variables
+def _get_mongo_uri():
+    try:
+        import streamlit as st
+        if "MONGO_URI" in st.secrets:
+            return st.secrets["MONGO_URI"]
+    except Exception:
+        pass
+    return os.getenv("MONGO_URI", "mongodb://localhost:27017")
+
+MONGO_URI = _get_mongo_uri()
 
 # MongoClient is created lazily; no blocking here
 client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=10000)

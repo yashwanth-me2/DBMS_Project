@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 pymongo
+dnspython
 streamlit
 requests
 pydantic

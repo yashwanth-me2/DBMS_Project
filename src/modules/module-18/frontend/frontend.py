@@ -1,7 +1,42 @@
 import os
-import streamlit as st
+import sys
+import time
+import subprocess
 import requests
 import pandas as pd
+import streamlit as st
+
+# --- START BACKEND SERVER IN BACKGROUND FOR STREAMLIT CLOUD ---
+@st.cache_resource
+def start_backend():
+    # Only start if the API isn't already accessible (e.g. from app.py or if already running)
+    try:
+        if requests.get("http://localhost:8000/api/m18/faqs/stats", timeout=1).status_code == 200:
+            return None
+    except:
+        pass
+    
+    print("🚀 Starting FastAPI backend server in the background...")
+    module_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    venv_python = os.path.join(module_root, "venv", "bin", "python")
+    if os.path.exists(venv_python):
+        python_exe = venv_python
+    else:
+        python_exe = sys.executable
+        
+    process = subprocess.Popen(
+        [python_exe, "-m", "uvicorn", "backend.backend:app", "--host", "0.0.0.0", "--port", "8000"],
+        cwd=module_root,
+        stdout=open(os.path.join(module_root, "uvicorn.log"), "w"),
+        stderr=subprocess.STDOUT
+    )
+    time.sleep(4) # Wait for startup and DB connection
+    return process
+
+# Initialize backend once per session
+start_backend()
+# --------------------------------------------------------------
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
