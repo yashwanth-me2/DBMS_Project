@@ -1,8 +1,26 @@
 import os
 import re
+import ssl
 from pathlib import Path
 from urllib.parse import urlparse, quote_plus, unquote
 import certifi
+
+# ── FIX: Python 3.14 + OpenSSL 3.x + MongoDB Atlas SSL compatibility ────
+# OpenSSL 3.x defaults to SECLEVEL=2 which requires cipher suites that
+# MongoDB Atlas M0 (free tier) doesn't support, causing TLSV1_ALERT_INTERNAL_ERROR.
+# We patch ssl.create_default_context BEFORE pymongo uses it to lower SECLEVEL to 1.
+_orig_create_default_context = ssl.create_default_context
+
+def _patched_create_default_context(*args, **kwargs):
+    if 'cafile' not in kwargs:
+        kwargs['cafile'] = certifi.where()
+    ctx = _orig_create_default_context(*args, **kwargs)
+    ctx.set_ciphers('DEFAULT:@SECLEVEL=1')
+    return ctx
+
+ssl.create_default_context = _patched_create_default_context
+# ── END FIX ──────────────────────────────────────────────────────────────
+
 from pymongo import MongoClient, TEXT
 from pymongo.errors import CollectionInvalid
 from dotenv import load_dotenv
@@ -48,7 +66,7 @@ def _fix_mongo_uri(uri):
 
 MONGO_URI = _fix_mongo_uri(_get_mongo_uri())
 
-# MongoClient — use certifi CA certs to fix SSL on Python 3.14 / Streamlit Cloud
+# MongoClient — certifi + patched SSL context handles TLS on all Python versions
 client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=10000, tlsCAFile=certifi.where())
 db = client.module_18_db
 
