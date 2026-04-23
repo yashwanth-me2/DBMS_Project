@@ -9,126 +9,33 @@ import streamlit as st
 # --- START BACKEND SERVER IN BACKGROUND FOR STREAMLIT CLOUD ---
 @st.cache_resource
 def start_backend():
-    """Start the FastAPI backend and return (process, debug_info)."""
-    debug = {}
-
-    # 1. Check if already running
+    # Only start if the API isn't already accessible
     try:
-        r = requests.get("http://localhost:8000/api/m18/faqs/stats", timeout=2)
-        if r.status_code == 200:
-            debug["status"] = "✅ Backend was already running"
-            return None, debug
-    except Exception as e:
-        debug["initial_check"] = f"Backend not running yet: {e}"
-
-    # 2. Resolve paths
-    module_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    debug["__file__"] = __file__
-    debug["module_root"] = module_root
-    debug["module_root_exists"] = os.path.isdir(module_root)
-    debug["backend_dir_exists"] = os.path.isdir(os.path.join(module_root, "backend"))
-    debug["database_dir_exists"] = os.path.isdir(os.path.join(module_root, "database"))
-    debug["backend_py_exists"] = os.path.isfile(os.path.join(module_root, "backend", "backend.py"))
-    debug["database_py_exists"] = os.path.isfile(os.path.join(module_root, "database", "database.py"))
+        if requests.get("http://localhost:8000/api/m18/faqs/stats", timeout=2).status_code == 200:
+            return None
+    except:
+        pass
     
-    # List module_root contents
-    try:
-        debug["module_root_contents"] = os.listdir(module_root)
-    except Exception as e:
-        debug["module_root_contents"] = f"ERROR: {e}"
-
-    # 3. Check Python executable
+    print("🚀 Starting FastAPI backend server in the background...")
+    module_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
     venv_python = os.path.join(module_root, "venv", "bin", "python")
     if os.path.exists(venv_python):
         python_exe = venv_python
-        debug["python_exe"] = f"{venv_python} (venv)"
     else:
         python_exe = sys.executable
-        debug["python_exe"] = f"{sys.executable} (system)"
-
-    # 4. Check MONGO_URI availability
-    try:
-        mongo_from_secrets = st.secrets.get("MONGO_URI", None)
-        if mongo_from_secrets:
-            debug["MONGO_URI"] = f"✅ Found in st.secrets (length={len(mongo_from_secrets)})"
-        else:
-            debug["MONGO_URI"] = "⚠️ NOT in st.secrets"
-    except Exception:
-        debug["MONGO_URI"] = "⚠️ st.secrets not available"
-    
-    mongo_from_env = os.getenv("MONGO_URI", None)
-    if mongo_from_env:
-        debug["MONGO_URI_env"] = f"✅ Found in env (length={len(mongo_from_env)})"
-    else:
-        debug["MONGO_URI_env"] = "❌ NOT in environment"
-
-    # 5. Check .env file
-    env_path = os.path.join(module_root, ".env")
-    debug[".env_exists"] = os.path.isfile(env_path)
-
-    # 6. Start subprocess
-    log_path = "/tmp/uvicorn.log"
-    try:
-        log_file = open(log_path, "w")
-    except Exception as e:
-        log_file = subprocess.DEVNULL
-        debug["log_file_error"] = str(e)
-
-    cmd = [python_exe, "-m", "uvicorn", "backend.backend:app", "--host", "0.0.0.0", "--port", "8000"]
-    debug["command"] = " ".join(cmd)
-    
-    try:
-        process = subprocess.Popen(
-            cmd,
-            cwd=module_root,
-            stdout=log_file,
-            stderr=subprocess.STDOUT
-        )
-        debug["subprocess_pid"] = process.pid
-    except Exception as e:
-        debug["subprocess_error"] = str(e)
-        debug["status"] = "❌ Failed to start subprocess"
-        return None, debug
-
-    # 7. Wait and retry health check
-    for i in range(10):
-        time.sleep(2)
         
-        # Check if process crashed
-        exit_code = process.poll()
-        if exit_code is not None:
-            debug["process_crashed"] = f"❌ Process exited with code {exit_code} after {(i+1)*2}s"
-            break
-        
-        try:
-            r = requests.get("http://localhost:8000/api/m18/faqs/stats", timeout=2)
-            if r.status_code == 200:
-                debug["status"] = f"✅ Backend online after {(i+1)*2}s"
-                return process, debug
-            else:
-                debug[f"health_check_{(i+1)*2}s"] = f"HTTP {r.status_code}"
-        except Exception as e:
-            debug[f"health_check_{(i+1)*2}s"] = str(e)
-
-    # 8. Read log file for clues
-    try:
-        if hasattr(log_file, 'close'):
-            log_file.close()
-        with open(log_path) as f:
-            log_contents = f.read()
-            debug["uvicorn_log"] = log_contents if log_contents else "(empty log)"
-    except Exception as e:
-        debug["uvicorn_log_error"] = str(e)
-
-    debug["status"] = "⚠️ Backend did not respond after 20s"
-    return process, debug
+    process = subprocess.Popen(
+        [python_exe, "-m", "uvicorn", "backend.backend:app", "--host", "0.0.0.0", "--port", "8000"],
+        cwd=module_root,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+    time.sleep(5)
+    return process
 
 # Initialize backend once per session
-_backend_result = start_backend()
-if isinstance(_backend_result, tuple):
-    _backend_process, _debug_info = _backend_result
-else:
-    _backend_process, _debug_info = _backend_result, {}
+start_backend()
 # --------------------------------------------------------------
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
@@ -208,25 +115,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── 🔧 DEBUG DIAGNOSTICS (remove after fixing) ──────────────────────────
-if _debug_info:
-    with st.expander("🔧 DEBUG: Backend Startup Diagnostics", expanded=True):
-        st.markdown("**Status:** " + _debug_info.get("status", "unknown"))
-        
-        # Show uvicorn log prominently if backend failed
-        if "uvicorn_log" in _debug_info:
-            st.markdown("**📋 Uvicorn Log (backend output):**")
-            st.code(_debug_info["uvicorn_log"], language="text")
-        
-        if "process_crashed" in _debug_info:
-            st.error(_debug_info["process_crashed"])
-        
-        # Show all debug info as a table
-        st.markdown("**All diagnostics:**")
-        for key, value in _debug_info.items():
-            if key not in ("uvicorn_log", "status", "process_crashed"):
-                st.text(f"  {key}: {value}")
-# ── END DEBUG ─────────────────────────────────────────────────────────────
 
 
 tab_chat, tab_dash, tab_faqs, tab_answers, tab_api = st.tabs([
