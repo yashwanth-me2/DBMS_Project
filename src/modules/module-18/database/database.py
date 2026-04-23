@@ -1,6 +1,7 @@
 import os
 import re
 from pathlib import Path
+from urllib.parse import urlparse, quote_plus, unquote
 from pymongo import MongoClient, TEXT
 from pymongo.errors import CollectionInvalid
 from dotenv import load_dotenv
@@ -20,7 +21,31 @@ def _get_mongo_uri():
         pass
     return os.getenv("MONGO_URI", "mongodb://localhost:27017")
 
-MONGO_URI = _get_mongo_uri()
+def _fix_mongo_uri(uri):
+    """Re-encode credentials with quote_plus for newer pymongo (RFC 3986)."""
+    try:
+        parsed = urlparse(uri)
+        if not parsed.username:
+            return uri
+        # Decode then re-encode with quote_plus (what pymongo expects)
+        username = quote_plus(unquote(parsed.username))
+        password = quote_plus(unquote(parsed.password)) if parsed.password else ""
+        # Reconstruct netloc: user:pass@host[:port]
+        host = parsed.hostname
+        if parsed.port:
+            host += f":{parsed.port}"
+        netloc = f"{username}:{password}@{host}" if password else f"{username}@{host}"
+        # Rebuild full URI preserving scheme, path, query, fragment
+        fixed = f"{parsed.scheme}://{netloc}{parsed.path}"
+        if parsed.query:
+            fixed += f"?{parsed.query}"
+        if parsed.fragment:
+            fixed += f"#{parsed.fragment}"
+        return fixed
+    except Exception:
+        return uri  # Return original on any error
+
+MONGO_URI = _fix_mongo_uri(_get_mongo_uri())
 
 # MongoClient is created lazily; no blocking here
 client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=10000)
