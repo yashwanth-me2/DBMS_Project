@@ -2,6 +2,7 @@ import os
 import re
 from pathlib import Path
 from urllib.parse import urlparse, quote_plus, unquote
+import certifi
 from pymongo import MongoClient, TEXT
 from pymongo.errors import CollectionInvalid
 from dotenv import load_dotenv
@@ -47,8 +48,8 @@ def _fix_mongo_uri(uri):
 
 MONGO_URI = _fix_mongo_uri(_get_mongo_uri())
 
-# MongoClient is created lazily; no blocking here
-client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=10000)
+# MongoClient — use certifi CA certs to fix SSL on Python 3.14 / Streamlit Cloud
+client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=10000, tlsCAFile=certifi.where())
 db = client.module_18_db
 
 
