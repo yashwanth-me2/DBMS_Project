@@ -1,48 +1,18 @@
-import subprocess
-import sys
-import time
 import os
+import sys
 
-def main():
-    print("🏥 Starting Module 18 - Clinical QA System...")
-    
-    # Ensure we are in the correct directory (module-18 root)
-    module_root = os.path.dirname(os.path.abspath(__file__))
-    os.chdir(module_root)
+# Ensure module-18 root is on sys.path so all internal imports work
+module_root = os.path.dirname(os.path.abspath(__file__))
+os.chdir(module_root)
+if module_root not in sys.path:
+    sys.path.insert(0, module_root)
 
-    # Determine which python executable to use (check for local virtual environment)
-    venv_python = os.path.join(module_root, "venv", "bin", "python")
-    if os.path.exists(venv_python):
-        python_exe = venv_python
-    else:
-        python_exe = sys.executable
+# Execute the frontend Streamlit app.
+# We use exec() instead of import so that Streamlit's rerun mechanism
+# works correctly (imports are cached and won't re-execute on rerun).
+frontend_path = os.path.join(module_root, "frontend", "frontend.py")
+with open(frontend_path) as f:
+    code = compile(f.read(), frontend_path, "exec")
 
-    # Start the FastAPI backend server
-    print(f"🚀 Starting FastAPI backend server on port 8000 using {python_exe}...")
-    backend_process = subprocess.Popen(
-        [python_exe, "-m", "uvicorn", "backend.backend:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
-    )
-
-    # Give the backend a few seconds to start up and connect to MongoDB
-    time.sleep(3)
-
-    # Start the Streamlit frontend server
-    print(f"🎨 Starting Streamlit frontend server on port 8501 using {python_exe}...")
-    frontend_process = subprocess.Popen(
-        [python_exe, "-m", "streamlit", "run", "frontend/frontend.py"]
-    )
-
-    try:
-        # Wait for both processes (runs indefinitely until interrupted)
-        backend_process.wait()
-        frontend_process.wait()
-    except KeyboardInterrupt:
-        print("\n🛑 Shutting down servers gracefully...")
-        backend_process.terminate()
-        frontend_process.terminate()
-        backend_process.wait()
-        frontend_process.wait()
-        print("✅ Servers stopped.")
-
-if __name__ == "__main__":
-    main()
+# Override __file__ so frontend.py's path-based logic resolves correctly
+exec(code, {**globals(), "__file__": frontend_path})
